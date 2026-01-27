@@ -10,6 +10,13 @@
 
 const TELEGRAM_API_BASE = "https://api.telegram.org/bot";
 const TELEGRAM_LIMIT = 4096;
+const LOG_LEVEL = LOG_LEVELS.DEBUG;
+const APPROVER_USERS = [
+  "Ткаченко Антон Олександрович",
+  "Ващенко Ігор Володимирович",
+];
+const NOTIFIED_ID_PREFIX = "N";
+const UNOTIFIED_ID_PREFIX = "U";
 
 /**
  * Обробник GET запитів (для перевірки)
@@ -27,7 +34,7 @@ function doPost(e) {
     const update = JSON.parse(e.postData.contents);
     handleWebhook(update);
   } catch (error) {
-    // ignore
+    addErrorLog("doPost", error.message);
   }
 
   return HtmlService.createHtmlOutput("OK");
@@ -162,71 +169,203 @@ function sendTelegramMessage(chatId, text, keyboard) {
   return result;
 }
 
-const MAIN_KEYBOARD_BUTTON = {
-  myProcessingTasks: "⏳ Мої завдання в роботі",
-  myUnpaidApplications: "💳 Мої незаплачені заявки",
-  applicationsToApprove: "✅ Заявки на затвердження",
-  settings: "⚙️ Налаштування",
-};
+/**
+ * Редагувати повідомлення в Telegram
+ * @param {string|number} chatId - ID чату
+ * @param {number} messageId - ID повідомлення
+ * @param {string} text - Новий текст
+ * @param {Object|undefined} keyboard - Необов'язкова клавіатура
+ * @returns {Object} Відповідь від API
+ */
+function editTelegramMessage(chatId, messageId, text, keyboard) {
+  const botToken = getBotTokenFromProperties();
+  const url = `${TELEGRAM_API_BASE}${botToken}/editMessageText`;
+  const payload = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: text || " ",
+    parse_mode: "HTML",
+  };
+
+  if (keyboard) {
+    payload.reply_markup = keyboard;
+  }
+
+  const response = UrlFetchApp.fetch(url, {
+    method: /** @type {const} */ ("post"),
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+
+  const result = JSON.parse(response.getContentText());
+
+  if (!result.ok) {
+    throw new Error(`Telegram API помилка: ${result.description}`);
+  }
+
+  return result;
+}
+
+/** Видалити повідомлення в Telegram
+ * @param {string|number} chatId - ID чату
+ * @param {number} messageId - ID повідомлення
+ */
+function deleteTelegramMessage(chatId, messageId) {
+  const botToken = getBotTokenFromProperties();
+  const url = `${TELEGRAM_API_BASE}${botToken}/deleteMessage`;
+  const payload = {
+    chat_id: chatId,
+    message_id: messageId,
+  };
+  UrlFetchApp.fetch(url, {
+    method: /** @type {const} */ ("post"),
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+}
 
 /**
  * Обробити webhook від Telegram
  * @param {Object} update - Об'єкт оновлення від Telegram
  */
 function handleWebhook(update) {
-  if (!update.message) {
-    return { ok: true, message: "No message" };
-  }
+  let chatId;
+  let user;
+  const callback = update.callback_query;
 
-  const message = update.message;
-  const chatId = message.chat.id;
-  const username = message.from.username || "";
-  const /** @type {string} */ text = message.text || "";
+  if (callback) {
+    addDebugLog(
+      "handleWebhook:callback_query",
+      JSON.stringify(update, null, 2),
+    );
 
-  addDebugLog("handleWebhook", JSON.stringify(update, null, 2), chatId);
+    chatId = callback.message.chat.id;
+    const messageId = callback.message.message_id;
 
-  const user = getUserByChatId(chatId);
+    user = getUserByChatId(chatId);
 
-  if (!user) {
-    const responseText =
-      `👋 Привіт!\n\n` +
-      `Ви ще не зареєстровані в системі.\n` +
-      `Зверніться до адміністратора для реєстрації.\n\n` +
-      `Ваш chat_id: ${chatId}`;
+    if (!user) return;
 
-    sendTelegramMessage(chatId, responseText);
-    return;
-  }
+    const data = callback.data || "";
 
-  // Обробляємо команду /start
-  if (text === "/start" || text.startsWith("/start ")) {
+    addDebugLog(
+      "handleWebhook:callback_query",
+      JSON.stringify(update, null, 2),
+      chatId,
+    );
+
+    if (data.startsWith("approve_payment")) {
+      const result = approvePayment(user, data.split(":")[1]);
+
+      if (result) {
+        deleteTelegramMessage(chatId, messageId);
+      }
+    } else if (data.startsWith("complete_task")) {
+      const taskId = data.split(":")[1];
+
+      markTaskAsCompleted(user, taskId, messageId);
+    } else if (data.startsWith("change_option")) {
+      const optionId = data.split(":")[1];
+
+      setOptionForUser(user, optionId, messageId);
+    }
+  } else {
+    addDebugLog(
+      "handleWebhook:message",
+      JSON.stringify(update, null, 2),
+      chatId,
+    );
+
+    const message = update.message;
+    chatId = message.chat.id;
+    const /** @type {string} */ text = message.text || "";
+
+    user = getUserByChatId(chatId);
+
+    if (!user) {
+      const responseText =
+        `👋 Привіт!\n\n` +
+        `Ви ще не зареєстровані в системі.\n` +
+        `Зверніться до адміністратора для реєстрації.\n\n` +
+        `Ваш chat_id: ${chatId}`;
+
+      sendTelegramMessage(chatId, responseText);
+      return;
+    }
+
+    if (
+      text === MAIN_KEYBOARD_BUTTON.myProcessingTasks ||
+      text.includes(MAIN_KEYBOARD_BUTTON.myProcessingTasks)
+    ) {
+      sendProcessingTaskToUser(user);
+
+      return;
+    }
+
+    if (
+      text === MAIN_KEYBOARD_BUTTON.myUnpaidApplications ||
+      text.includes(MAIN_KEYBOARD_BUTTON.myUnpaidApplications)
+    ) {
+      addDebugLog(
+        "handleWebhook:myUnpaidApplications",
+        `Користувач ${user.fullname} запросив свої незаплачені заявки.`,
+        chatId,
+      );
+
+      processUnpaidUserApplications(user);
+
+      return;
+    }
+
+    if (
+      text === MAIN_KEYBOARD_BUTTON.applicationsToApprove ||
+      text.includes(MAIN_KEYBOARD_BUTTON.applicationsToApprove)
+    ) {
+      addDebugLog(
+        "handleWebhook:applicationsToApprove",
+        `Користувач ${user.fullname} запросив заявки на затвердження.`,
+        chatId,
+      );
+
+      processUnapprovedUserApplications(user);
+
+      return;
+    }
+
+    if (
+      text === MAIN_KEYBOARD_BUTTON.settings ||
+      text.includes(MAIN_KEYBOARD_BUTTON.settings)
+    ) {
+      optionsMenu(user);
+
+      return;
+    }
+
     sendMainMenu(user);
   }
+}
 
-  // Команда /help
-  if (
-    text === MAIN_KEYBOARD_BUTTON.myProcessingTasks ||
-    text.includes(MAIN_KEYBOARD_BUTTON.myProcessingTasks)
-  ) {
-    // TODO: Додати обробку
-    sendTelegramMessage(chatId, "Функціонал в розробці.");
-  }
-
-  if (
-    text === MAIN_KEYBOARD_BUTTON.myProcessingTasks ||
-    text.includes(MAIN_KEYBOARD_BUTTON.myProcessingTasks)
-  ) {
-    // TODO: Додати обробку
-    sendTelegramMessage(chatId, "Функціонал в розробці.");
-  }
-
-  if (
-    text === MAIN_KEYBOARD_BUTTON.myProcessingTasks ||
-    text.includes(MAIN_KEYBOARD_BUTTON.myProcessingTasks)
-  ) {
-    // TODO: Додати обробку
-    sendTelegramMessage(chatId, "Функціонал в розробці.");
-  }
+/**
+ * Відповісти на callback_query Telegram API
+ * @param {string} callbackQueryId
+ * @param {string} text
+ */
+function answerCallbackQuery(callbackQueryId, text) {
+  const botToken = getBotTokenFromProperties();
+  const url = `${TELEGRAM_API_BASE}${botToken}/answerCallbackQuery`;
+  const payload = {
+    callback_query_id: callbackQueryId,
+    text: text || "",
+    show_alert: false,
+  };
+  UrlFetchApp.fetch(url, {
+    method: /** @type {const} */ ("post"),
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
 }
 
 /**

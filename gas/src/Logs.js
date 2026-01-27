@@ -13,8 +13,6 @@ const LOG_LEVELS = {
   NONE: 4,
 };
 
-const LOG_LEVEL = LOG_LEVELS.DEBUG;
-
 const LOG_TYPES = {
   DEBUG: "DEBUG",
   INFO: "INFO",

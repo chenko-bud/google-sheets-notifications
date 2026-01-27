@@ -29,6 +29,7 @@ function getUsersSheet() {
   const spreadsheetId = PropertiesService.getScriptProperties().getProperty(
     "USERS_SPREADSHEET_ID",
   );
+
   if (!spreadsheetId) {
     throw new Error("USERS_SPREADSHEET_ID не налаштовано в Script Properties");
   }
@@ -81,15 +82,31 @@ function getUserByChatId(chatId) {
       service: userRow[USERS_SHEET_CONFIG.columns.service.index - 1],
       chatId: userRow[USERS_SHEET_CONFIG.columns.chatId.index - 1].toString(),
       settings: {
-        paymentsNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1],
-        ),
-        unpaidNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1],
-        ),
-        newTasksNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1],
-        ),
+        paymentsNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1
+          ] === true
+            ? true
+            : false,
+        unpaidNotifications:
+          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1] ===
+            "TRUE" ||
+          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1] ===
+            true
+            ? true
+            : false,
+        newTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
       },
     };
   }
@@ -128,18 +145,136 @@ function getUserByName(name) {
       service: userRow[USERS_SHEET_CONFIG.columns.service.index - 1],
       chatId: userRow[USERS_SHEET_CONFIG.columns.chatId.index - 1].toString(),
       settings: {
-        paymentsNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1],
-        ),
-        unpaidNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1],
-        ),
-        newTasksNotifications: Boolean(
-          userRow[USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1],
-        ),
+        paymentsNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.paymentsNotifications.index - 1
+          ] === true
+            ? true
+            : false,
+        unpaidNotifications:
+          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1] ===
+            "TRUE" ||
+          userRow[USERS_SHEET_CONFIG.columns.unpaidNotifications.index - 1] ===
+            true
+            ? true
+            : false,
+        newTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.newTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
       },
     };
   }
 
   return null;
+}
+
+const OPTIONS_KEYBOARD_BUTTON = {
+  paymentsNotifications: {
+    id: "paymentsNotifications",
+    enabled: "✅ Отримувати сповіщення про оплати (ввімкнено)",
+    disabled: "❌ Отримувати сповіщення про оплати (вимкнено)",
+  },
+  unpaidNotifications: {
+    id: "unpaidNotifications",
+    enabled: "✅ Отримувати сповіщення про несплачені заявки (ввімкнено)",
+    disabled: "❌ Отримувати сповіщення про несплачені заявки (вимкнено)",
+  },
+  newTasksNotifications: {
+    id: "newTasksNotifications",
+    enabled: "✅ Отримувати сповіщення про нові завдання (ввімкнено)",
+    disabled: "❌ Отримувати сповіщення про нові завдання (вимкнено)",
+  },
+};
+/**
+ * Відправити головне меню користувачу
+ * @param {Object} user - Користувач
+ * @param {string} user.fullname - ПІБ користувача
+ * @param {string} user.position - Посада користувача
+ * @param {string} user.service - Служба користувача
+ * @param {string} user.chatId - Telegram chat_id користувача
+ * @param {Object} user.settings - Налаштування користувача
+ * @param {boolean} user.settings.paymentsNotifications - Сповіщення про оплати
+ * @param {boolean} user.settings.unpaidNotifications - Сповіщення про несплачені заявки
+ * @param {boolean} user.settings.newTasksNotifications - Сповіщення про нові завдання
+ * @param {number|undefined} messageId - Ідентифікатор повідомлення для редагування
+ */
+function optionsMenu(user, messageId = undefined) {
+  const keyboard = {
+    inline_keyboard: Object.values(OPTIONS_KEYBOARD_BUTTON).map((option) => [
+      {
+        text: user.settings[option.id] ? option.enabled : option.disabled,
+        callback_data: `change_option:${option.id}`,
+      },
+    ]),
+  };
+
+  const messageText = "Налаштування сповіщень: оберіть потрібний параметр 👇";
+
+  if (messageId) {
+    editTelegramMessage(user.chatId, messageId, messageText, keyboard);
+  } else {
+    sendTelegramMessage(user.chatId, messageText, keyboard);
+  }
+}
+
+/**
+ * Встановити опцію для користувача
+ * @param {Object} user - Користувач
+ * @param {string} user.fullname - ПІБ користувача
+ * @param {string} user.position - Посада користувача
+ * @param {string} user.service - Служба користувача
+ * @param {string} user.chatId - Telegram chat_id користувача
+ * @param {Object} user.settings - Налаштування користувача
+ * @param {boolean} user.settings.paymentsNotifications - Сповіщення про оплати
+ * @param {boolean} user.settings.unpaidNotifications - Сповіщення про несплачені заявки
+ * @param {boolean} user.settings.newTasksNotifications - Сповіщення про нові завдання
+ * @param {string} optionId - Ідентифікатор опції
+ * @param {number} messageId - Ідентифікатор повідомлення для редагування
+ */
+function setOptionForUser(user, optionId, messageId) {
+  const sheet = getUsersSheet();
+  const data = sheet.getDataRange().getValues();
+
+  const userRowIndex = data.findIndex((row, i) => {
+    if (i === 0) return false; // Пропускаємо заголовок
+
+    return (
+      row[USERS_SHEET_CONFIG.columns.chatId.index - 1].toString() ===
+      user.chatId.toString()
+    );
+  });
+
+  if (userRowIndex === -1) {
+    addErrorLog(
+      "setOptionForUser",
+      `Користувача з chatId ${user.chatId} не знайдено в таблиці`,
+      user.chatId,
+    );
+
+    return;
+  }
+
+  const columnIndex = USERS_SHEET_CONFIG.columns[optionId].index;
+
+  sheet
+    .getRange(userRowIndex + 1, columnIndex)
+    .setValue(!user.settings[optionId]);
+  user.settings[optionId] = !user.settings[optionId];
+
+  addDebugLog(
+    "setOptionForUser",
+    `Оновлено опцію ${optionId} для користувача ${user.fullname} (${user.chatId}) на ${user.settings[optionId]}`,
+    user.chatId,
+  );
+
+  optionsMenu(user, messageId);
 }
