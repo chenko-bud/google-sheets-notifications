@@ -42,18 +42,19 @@ function formatTaskMessage(title, taskData) {
  * @returns {Object|undefined} Клавіатура або undefined
  */
 function getTaskKeyboard(taskId) {
-  if (!taskId || taskId.toString().trim() === "") return;
+  //   if (!taskId || taskId.toString().trim() === "") return;
 
-  return {
-    inline_keyboard: [
-      [
-        {
-          text: "Відмітити як виконане ✅",
-          callback_data: `complete_task:${taskId.slice(1)}`,
-        },
-      ],
-    ],
-  };
+  //   return {
+  //     inline_keyboard: [
+  //       [
+  //         {
+  //           text: "Відмітити як виконане ✅",
+  //           callback_data: `complete_task:${taskId.slice(1)}`,
+  //         },
+  //       ],
+  //     ],
+  //   };
+  return;
 }
 
 const DEFAULT_TASK_CONFIG = {
@@ -178,7 +179,7 @@ function processTaskAdd(e, customConfig = {}) {
         `Сповіщення про нові завдання вимкнено для користувача "${user.fullname}"`,
         user.chatId,
       );
-      
+
       return;
     }
 
