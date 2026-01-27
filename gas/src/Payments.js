@@ -82,7 +82,7 @@ const DEFAULT_SOURCE_CONFIG = {
   },
   toggleApprovedColumn: -1, // не використовується
   togglePaidColumn: -1, // не використовується
-  insertRowPosition: -1, // не використовується
+  dataStartRow: 2, // Дані починаються з 2-го рядка
 };
 
 const DEFAULT_TARGET_CONFIG = {
@@ -103,7 +103,7 @@ const DEFAULT_TARGET_CONFIG = {
   },
   toggleApprovedColumn: 13, // M - Позначка затвердження
   togglePaidColumn: 14, // N - Позначка оплати
-  insertRowPosition: 7, // Вставляти нові рядки починаючи з 7-го рядка
+  dataStartRow: 7, // Дані починаються з 7-го рядка
 };
 
 /** Отримати конфігурацію з урахуванням кастомної
@@ -119,8 +119,7 @@ function getConfig(defaultConfig, customConfig = {}) {
       customConfig.toggleApprovedColumn || defaultConfig.toggleApprovedColumn,
     togglePaidColumn:
       customConfig.togglePaidColumn || defaultConfig.togglePaidColumn,
-    insertRowPosition:
-      customConfig.insertRowPosition || defaultConfig.insertRowPosition,
+    dataStartRow: customConfig.dataStartRow || defaultConfig.dataStartRow,
   };
 }
 
@@ -303,9 +302,9 @@ function processUnpaidUserApplications(user, customConfig = {}) {
 
     const data = sheet
       .getRange(
-        config.insertRowPosition,
+        config.dataStartRow,
         1,
-        lastRow - config.insertRowPosition + 1,
+        lastRow - config.dataStartRow + 1,
         lastCol,
       )
       .getValues();
@@ -397,26 +396,24 @@ function processUnpaidUserApplications(user, customConfig = {}) {
   }
 }
 
-
 const DEFAULT_DATE_CONFIG = {
   sheetName: "Реєстр",
   row: 2, // 2
   column: 3, // C2
 };
 
-
 /** Встановити сьогоднішню дату в комірку
  * @param {Object} dateCustomConfig - Конфігурація дати
  */
 function setTodayDate(dateCustomConfig = {}) {
   const dateConfig = { ...DEFAULT_DATE_CONFIG, ...dateCustomConfig };
-  
+
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = spreadsheet.getSheetByName(dateConfig.sheetName);
 
   const dateObject = new Date();
   dateObject.setHours(0, 0, 0, 0);
-  
+
   sheet.getRange(dateConfig.row, dateConfig.column, 1, 1).setValue(dateObject);
 }
 
@@ -425,7 +422,11 @@ function setTodayDate(dateCustomConfig = {}) {
  * @param {Object} customSourceConfig - Кастомна конфігурація джерела
  * @param {Object} customTargetConfig - Кастомна конфігурація приймача
  */
-function getApplications(dateCustomConfig = {}, customSourceConfig = {}, customTargetConfig = {}) {
+function getApplications(
+  dateCustomConfig = {},
+  customSourceConfig = {},
+  customTargetConfig = {},
+) {
   const sourceConfig = getConfig(DEFAULT_SOURCE_CONFIG, customSourceConfig);
   const targetConfig = getConfig(DEFAULT_TARGET_CONFIG, customTargetConfig);
   const dateConfig = { ...DEFAULT_DATE_CONFIG, ...dateCustomConfig };
@@ -434,7 +435,9 @@ function getApplications(dateCustomConfig = {}, customSourceConfig = {}, customT
   const targetSheet = spreadsheet.getSheetByName(targetConfig.sheetName);
 
   // 1. Отримуємо дату для фільтрації (обрізаємо час, залишаємо тільки дату)
-  const rawDate = targetSheet.getRange(dateConfig.row, dateConfig.column).getValue();
+  const rawDate = targetSheet
+    .getRange(dateConfig.row, dateConfig.column)
+    .getValue();
 
   if (!rawDate) return;
 
@@ -446,11 +449,18 @@ function getApplications(dateCustomConfig = {}, customSourceConfig = {}, customT
   const maxCol = Math.max(...sourceColValues);
   const lastRow = sourceSheet.getLastRow();
 
-  if (lastRow < 2) return; // Якщо таблиця порожня
+  if (lastRow < sourceConfig.dataStartRow) return; // Якщо таблиця порожня
 
   // 3. Беремо дані тільки з потрібного діапазону стовпців
   // rangeData починається з індексу 0, який відповідає колонці minCol
-  const data = sourceSheet.getRange(2, minCol, lastRow - 1, maxCol - minCol + 1).getValues();
+  const data = sourceSheet
+    .getRange(
+      sourceConfig.dataStartRow,
+      minCol,
+      lastRow - sourceConfig.dataStartRow + 1,
+      maxCol - minCol + 1,
+    )
+    .getValues();
 
   // 4. Обробка даних через reduce
   const resultData = data.reduce((acc, row) => {
@@ -464,22 +474,21 @@ function getApplications(dateCustomConfig = {}, customSourceConfig = {}, customT
     const amountColIndex = sourceConfig.columns.AMOUNT - minCol;
     const rowAmount = row[amountColIndex];
 
-    if (!rowAmount || isNaN(Number(rowAmount)) || Number(rowAmount) <= 0) return acc;
+    if (!rowAmount || isNaN(Number(rowAmount)) || Number(rowAmount) <= 0)
+      return acc;
 
-    if (!("toLocaleDateString" in rowDate)) {
-      Logger.log(rowDate);
-      return acc
-    };
+    if (!compareDates(rowDate, "===", filterDate)) return acc;
 
-    if (rowDate.toLocaleDateString("uk-UA") !== filterDate) return acc;
-      
-    const newRow = new Array(12).fill("");
+    const newRow = new Array(
+      Math.max(...Object.values(targetConfig.columns)),
+    ).fill("");
 
     // Пробігаємось по ключах (ORGANIZATION, AMOUNT і т.д.)
-    Object.keys(targetConfig.columns).forEach(key => {
+    Object.keys(targetConfig.columns).forEach((key) => {
       // Логіка: індекс з конфігу мінус minCol (щоб попасти в обрізаний масив)
       if (sourceConfig.columns[key]) {
-        newRow[targetConfig.columns[key] - 1] = row[sourceConfig.columns[key] - minCol];
+        newRow[targetConfig.columns[key] - 1] =
+          row[sourceConfig.columns[key] - minCol];
       }
     });
 
@@ -490,16 +499,17 @@ function getApplications(dateCustomConfig = {}, customSourceConfig = {}, customT
 
   // 5. Вставка даних у Target Sheet
   if (resultData.length > 0) {
-    
     // Вставляємо порожні РЯДКИ (rows), щоб звільнити місце
-    targetSheet.insertRowsBefore(targetConfig.insertRowPosition, resultData.length);
-    
+    targetSheet.insertRowsBefore(targetConfig.dataStartRow, resultData.length);
+
     // Записуємо дані у новостворений діапазон
-    targetSheet.getRange(
-      targetConfig.insertRowPosition, 
-      1, 
-      resultData.length, 
-      resultData[0].length
-    ).setValues(resultData);
+    targetSheet
+      .getRange(
+        targetConfig.dataStartRow,
+        1,
+        resultData.length,
+        resultData[0].length,
+      )
+      .setValues(resultData);
   }
 }
