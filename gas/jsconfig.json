@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "None",
+    "noEmit": true,
+    "checkJs": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "typeRoots": ["../node_modules/@types"]
+  },
+  "include": ["src/**/*.js", "../gas-client/**/*.js"],
+  "exclude": ["node_modules"]
+}
