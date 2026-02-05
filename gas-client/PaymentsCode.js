@@ -10,7 +10,7 @@
 
 // Декларація бібліотеки (підключається в GAS)
 // @ts-ignore - NotificationsLibrary доступний після підключення бібліотеки в GAS
-/** @type {{ processApplicationPayment: Function, notifyAllUnpaidApplications: Function, getApplications: Function, setTodayDate: Function, testNotification: Function, processTaskAdd: Function, setIdsToExistingTasks: Function }} */
+/** @type {{ processApplicationPayment: Function, notifyAllUnpaidApplications: Function, getApplications: Function, setTodayDate: Function, testNotification: Function, processTaskAdd: Function, setIdsToExistingTasks: Function, notifyAllTasks: Function }} */
 var NotificationsLibrary;
 
 // ============================================

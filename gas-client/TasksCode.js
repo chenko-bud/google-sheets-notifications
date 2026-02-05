@@ -10,7 +10,7 @@
 
 // Декларація бібліотеки (підключається в GAS)
 // @ts-ignore - NotificationsLibrary доступний після підключення бібліотеки в GAS
-/** @type {{ processApplicationPayment: Function, notifyAllUnpaidApplications: Function, getApplications: Function, setTodayDate: Function, testNotification: Function, processTaskAdd: Function, setIdsToExistingTasks: Function }} */
+/** @type {{ processApplicationPayment: Function, notifyAllUnpaidApplications: Function, getApplications: Function, setTodayDate: Function, testNotification: Function, processTaskAdd: Function, setIdsToExistingTasks: Function, notifyAllTasks: Function }} */
 var NotificationsLibrary;
 
 // ============================================
@@ -27,6 +27,19 @@ function onEditHandler(e) {
 }
 
 /**
+ * Щоденний тригер для повідомлення про всі несплачені рядки
+ */
+function morningTasksNotificationsTrigger() {
+  NotificationsLibrary.notifyAllTasks({}, "morning");
+}
+
+/** Щоденний тригер для отримання заявок
+ */
+function eveningTasksNotificationsTrigger() {
+  NotificationsLibrary.notifyAllTasks({}, "evening");
+}
+
+/**
  * Встановити тригер
  * Запустіть цю функцію ОДИН раз після підключення бібліотеки
  */
@@ -40,6 +53,20 @@ function setupTriggers() {
     .onEdit()
     .create();
 
+  ScriptApp.newTrigger("morningTasksNotificationsTrigger")
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .inTimezone("Europe/Kiev")
+    .create();
+
+  ScriptApp.newTrigger("eveningTasksNotificationsTrigger")
+    .timeBased()
+    .everyDays(1)
+    .atHour(17)
+    .inTimezone("Europe/Kiev")
+    .create();
+
   console.log("✅ Тригер успішно встановлено!");
 }
 
@@ -49,8 +76,13 @@ function setupTriggers() {
 function deleteAllTriggers() {
   // Видаляємо існуючі тригери
   const triggers = ScriptApp.getProjectTriggers();
+
   triggers.forEach((trigger) => {
-    if (trigger.getHandlerFunction() === "onEditHandler") {
+    if (
+      trigger.getHandlerFunction() === "onEditHandler" ||
+      trigger.getHandlerFunction() === "morningTasksNotificationsTrigger" ||
+      trigger.getHandlerFunction() === "eveningTasksNotificationsTrigger"
+    ) {
       ScriptApp.deleteTrigger(trigger);
     }
   });

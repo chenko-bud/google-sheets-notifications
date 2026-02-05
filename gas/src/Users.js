@@ -16,8 +16,14 @@ const USERS_SHEET_CONFIG = {
     paymentsNotifications: { index: 5, name: "payments_notifications" },
     unpaidNotifications: { index: 6, name: "unpaid_notifications" },
     newTasksNotifications: { index: 7, name: "new_tasks_notifications" },
-    reserved1: { index: 8, name: "reserved_1" },
-    reserved2: { index: 9, name: "reserved_2" },
+    morningTasksNotifications: {
+      index: 8,
+      name: "morning_tasks_notifications",
+    },
+    eveningTasksNotifications: {
+      index: 9,
+      name: "evening_tasks_notifications",
+    },
   },
 };
 
@@ -41,16 +47,21 @@ function getUsersSheet() {
   if (!sheet) {
     sheet = spreadsheet.insertSheet(USERS_SHEET_CONFIG.sheetName);
     sheet
-      .getRange(1, 1, 1, 4)
+      .getRange(1, 1, 1, 9)
       .setValues([
         [
           USERS_SHEET_CONFIG.columns.fullname.name,
           USERS_SHEET_CONFIG.columns.position.name,
           USERS_SHEET_CONFIG.columns.service.name,
           USERS_SHEET_CONFIG.columns.chatId.name,
+          USERS_SHEET_CONFIG.columns.paymentsNotifications.name,
+          USERS_SHEET_CONFIG.columns.unpaidNotifications.name,
+          USERS_SHEET_CONFIG.columns.newTasksNotifications.name,
+          USERS_SHEET_CONFIG.columns.morningTasksNotifications.name,
+          USERS_SHEET_CONFIG.columns.eveningTasksNotifications.name,
         ],
       ]);
-    sheet.getRange(1, 1, 1, 4).setFontWeight("bold");
+    sheet.getRange(1, 1, 1, 9).setFontWeight("bold");
   }
 
   return sheet;
@@ -59,7 +70,7 @@ function getUsersSheet() {
 /**
  * Отримати User за chatId
  * @param {string} chatId - Telegram chat_id
- * @returns {{fullname: string, position: string, service: string, chatId: string, settings: {paymentsNotifications: boolean, unpaidNotifications: boolean, newTasksNotifications: boolean}} | null} Об'єкт користувача або null
+ * @returns {{fullname: string, position: string, service: string, chatId: string, settings: {paymentsNotifications: boolean, unpaidNotifications: boolean, newTasksNotifications: boolean, morningTasksNotifications: boolean, eveningTasksNotifications: boolean}} | null} Об'єкт користувача або null
  */
 function getUserByChatId(chatId) {
   const data = getUsersSheet().getDataRange().getValues();
@@ -107,6 +118,24 @@ function getUserByChatId(chatId) {
           ] === true
             ? true
             : false,
+        morningTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.morningTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.morningTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
+        eveningTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.eveningTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.eveningTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
       },
     };
   }
@@ -117,7 +146,7 @@ function getUserByChatId(chatId) {
 /**
  * Отримати User за name
  * @param {string} name - Повне ім'я користувача
- * @returns {{fullname: string, position: string, service: string, chatId: string, settings: {paymentsNotifications: boolean, unpaidNotifications: boolean, newTasksNotifications: boolean}} | null} Об'єкт користувача або null
+ * @returns {{fullname: string, position: string, service: string, chatId: string, settings: {paymentsNotifications: boolean, unpaidNotifications: boolean, newTasksNotifications: boolean, morningTasksNotifications: boolean, eveningTasksNotifications: boolean}} | null} Об'єкт користувача або null
  */
 function getUserByName(name) {
   if (!name?.trim()) return null;
@@ -170,6 +199,24 @@ function getUserByName(name) {
           ] === true
             ? true
             : false,
+        morningTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.morningTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.morningTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
+        eveningTasksNotifications:
+          userRow[
+            USERS_SHEET_CONFIG.columns.eveningTasksNotifications.index - 1
+          ] === "TRUE" ||
+          userRow[
+            USERS_SHEET_CONFIG.columns.eveningTasksNotifications.index - 1
+          ] === true
+            ? true
+            : false,
       },
     };
   }
@@ -193,6 +240,16 @@ const OPTIONS_KEYBOARD_BUTTON = {
     enabled: "✅ Отримувати сповіщення про нові завдання (ввімкнено)",
     disabled: "❌ Отримувати сповіщення про нові завдання (вимкнено)",
   },
+  morningTasksNotifications: {
+    id: "morningTasksNotifications",
+    enabled: "✅ Отримувати ранкові сповіщення про завдання (ввімкнено)",
+    disabled: "❌ Отримувати ранкові сповіщення про завдання (вимкнено)",
+  },
+  eveningTasksNotifications: {
+    id: "eveningTasksNotifications",
+    enabled: "✅ Отримувати вечірні сповіщення про завдання (ввімкнено)",
+    disabled: "❌ Отримувати вечірні сповіщення про завдання (вимкнено)",
+  },
 };
 /**
  * Відправити головне меню користувачу
@@ -205,6 +262,8 @@ const OPTIONS_KEYBOARD_BUTTON = {
  * @param {boolean} user.settings.paymentsNotifications - Сповіщення про оплати
  * @param {boolean} user.settings.unpaidNotifications - Сповіщення про несплачені заявки
  * @param {boolean} user.settings.newTasksNotifications - Сповіщення про нові завдання
+ * @param {boolean} user.settings.morningTasksNotifications - Ранкові сповіщення про завдання
+ * @param {boolean} user.settings.eveningTasksNotifications - Вечірні сповіщення про завдання
  * @param {number|undefined} messageId - Ідентифікатор повідомлення для редагування
  */
 function optionsMenu(user, messageId = undefined) {
@@ -237,6 +296,8 @@ function optionsMenu(user, messageId = undefined) {
  * @param {boolean} user.settings.paymentsNotifications - Сповіщення про оплати
  * @param {boolean} user.settings.unpaidNotifications - Сповіщення про несплачені заявки
  * @param {boolean} user.settings.newTasksNotifications - Сповіщення про нові завдання
+ * @param {boolean} user.settings.morningTasksNotifications - Ранкові сповіщення про завдання
+ * @param {boolean} user.settings.eveningTasksNotifications - Вечірні сповіщення про завдання
  * @param {string} optionId - Ідентифікатор опції
  * @param {number} messageId - Ідентифікатор повідомлення для редагування
  */

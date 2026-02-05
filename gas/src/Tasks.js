@@ -37,6 +37,53 @@ function formatTaskMessage(title, taskData) {
   return message;
 }
 
+/**
+ * Форматувати повідомлення завдання
+ * @param {string} title - Заголовок повідомлення
+ * @param {Array<{ description: string, decision: string, date: string|Date|undefined }>} tasksData - Масив даних по завданням
+ * @param {string} emptyText - Текст, якщо немає платежів
+ * @returns {string} Форматоване повідомлення
+ */
+function formatTasksMessage(title, tasksData, emptyText) {
+  let message = tasksData.length > 0 ? `<b>${title}</b>\n\n` : "";
+  let currentLength = message.length;
+  const currentDate = new Date();
+
+  tasksData.forEach(({ description, decision, date }, i, { length }) => {
+    const isOverdued = compareDates(date, "<", currentDate);
+    let item = `${i + 1}.\n`;
+
+    if (description) {
+      message += `📋 <b>Завдання:</b> ${description}\n`;
+    }
+
+    if (decision) {
+      message += `💵 ${decision}\n`;
+    }
+
+    message += `📅 <b>Виконати до:</b> ${date ? formatDateUa(date) : "Не вказано"}${isOverdued ? "\n" : ""}`;
+
+    if (isOverdued) {
+      message += ` ⚠️ <i>(Протерміновано)</i>`;
+    }
+
+    if (i < length - 1) item += "_______________________________________\n";
+
+    if (currentLength + item.length > TELEGRAM_LIMIT) {
+      message += "<i>Далі список обрізано через ліміт Telegram</i>\n";
+
+      return;
+    }
+
+    message += item;
+    currentLength += item.length;
+  });
+
+  message += tasksData.length > 0 ? "" : `<b>${emptyText}</b>`;
+
+  return message;
+}
+
 /** Отримати клавіатуру для завдання
  * @param {string} taskId - Ідентифікатор завдання
  * @returns {Object|undefined} Клавіатура або undefined
@@ -321,27 +368,23 @@ function sendProcessingTaskToUser(user, customConfig = {}) {
       return acc;
     }, []);
 
-    if (userTasks.length > 0) {
-      sendTelegramMessage(user.chatId, `⏳ <b>Завдання в роботі:</b>`);
-      userTasks
-        .sort(
-          (a, b) => getMidnightTimestamp(a.date) - getMidnightTimestamp(b.date),
-        )
-        .forEach((task, index) => {
-          const message = formatTaskMessage(
-            `Завдання ${index + 1} з ${userTasks.length}:`,
-            task,
-          );
+    userTasks.sort(
+      (a, b) => getMidnightTimestamp(a.date) - getMidnightTimestamp(b.date),
+    );
 
-          sendTelegramMessage(user.chatId, message, getTaskKeyboard(task.id));
-        });
-    } else {
-      addDebugLog(
-        "sendProcessingTaskToUser",
-        `Завдань в роботі для користувача ${user.fullname} не знайдено`,
-        user.chatId,
-      );
-    }
+    const message = formatPaymentsMessage(
+      "⏳ <b>Завдання в роботі:</b>",
+      userTasks,
+      "Всі завдання виконані! ✅",
+    );
+
+    sendTelegramMessage(user.chatId, message);
+
+    addDebugLog(
+      "sendProcessingTaskToUser",
+      `Завдання в кількості ${userTasks.length} відправлено користувачу: ${user.fullname}`,
+      user.chatId,
+    );
   } catch (error) {
     addErrorLog("sendProcessingTaskToUser", error.message, user.chatId);
   }
@@ -479,5 +522,116 @@ function setIdsToExistingTasks(customConfig = {}) {
       .setValues(ids);
   } catch (error) {
     addErrorLog("setIdsToExistingTasks", error.message);
+  }
+}
+
+/**
+ * Розсилка повідомлень про завдання для всіх відповідальних (для тригера в Google Sheets)
+ * @param {Object} customConfig - Кастомна конфігурація
+ * @param {string} mode - Режим розсилки ("morning" або "evening")
+ */
+function notifyAllTasks(customConfig = {}, mode = "morning") {
+  const config = getTasksConfig(DEFAULT_TASK_CONFIG, customConfig);
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(config.sheetName);
+
+  if (!sheet) {
+    addErrorLog("notifyAllTasks", `Лист "${config.sheetName}" не знайдено`);
+
+    return;
+  }
+
+  try {
+    const lastCol = Math.max(
+      ...Object.values(config.columns),
+      config.togglePaidColumn,
+    );
+    const lastRow = sheet.getLastRow();
+    const data = sheet
+      .getRange(
+        config.dataStartRow,
+        1,
+        lastRow - config.dataStartRow + 1,
+        lastCol,
+      )
+      .getValues();
+    const filterDate = new Date();
+
+    // Групуємо завдання по відповідальному
+    const userTasksMap = {};
+
+    data.forEach((rowData) => {
+      const description = rowData[config.columns.DESCRIPTION - 1];
+      const decision = rowData[config.columns.DECISION - 1];
+
+      if (!description && !decision) {
+        return;
+      }
+
+      const status = rowData[config.columns.STATUS - 1];
+
+      if (
+        status.toString().trim().toLowerCase() !==
+        config.statuses.inProgress.text.toLowerCase()
+      ) {
+        return;
+      }
+
+      const responsible = rowData[config.columns.RESPONSIBLE - 1];
+
+      if (!responsible) return;
+
+      const user = getUserByName(responsible);
+
+      if (
+        !user ||
+        !user.chatId ||
+        !user.settings ||
+        (mode === "morning" &&
+          user.settings.morningTasksNotifications === false) ||
+        (mode === "evening" &&
+          user.settings.eveningTasksNotifications === false)
+      ) {
+        return;
+      }
+
+      const taskData = {
+        description,
+        decision,
+        date: rowData[config.columns.DATE - 1],
+      };
+
+      if (!userTasksMap[user.chatId]) {
+        userTasksMap[user.chatId] = {
+          user,
+          tasks: [],
+        };
+      }
+
+      userTasksMap[user.chatId].tasks.push(taskData);
+    });
+
+    // Формуємо масив для розсилки
+    const taskNotifications = Object.values(userTasksMap);
+
+    taskNotifications.forEach(({ user, tasks }) => {
+      if (!tasks.length) return;
+
+      const message = formatPaymentsMessage(
+        "⏳ <b>Нагадування про завдання в роботі:</b>",
+        tasks,
+        "Всі завдання виконані! ✅",
+      );
+
+      sendTelegramMessage(user.chatId, message);
+
+      addDebugLog(
+        "notifyAllTasks",
+        `Повідомлення про завдання в роботі відправлено користувачу ${user.fullname}`,
+        user.chatId,
+      );
+    });
+  } catch (error) {
+    addErrorLog("notifyAllTasks", `Помилка обробки: ${error.message}`);
   }
 }
