@@ -288,42 +288,62 @@ function sendProcessingTaskToUser(user, customConfig = {}) {
 
     addDebugLog("sendProcessingTaskToUser", `${user.fullname}`, user.chatId);
 
-    const spreadsheetId = PropertiesService.getScriptProperties().getProperty(
-      "TASKS_SPREADSHEET_ID",
-    );
+    const commonSpreadsheetId =
+      PropertiesService.getScriptProperties().getProperty(
+        "TASKS_SPREADSHEET_ID",
+      );
 
-    if (!spreadsheetId) {
+    const projectSpreadsheetId =
+      PropertiesService.getScriptProperties().getProperty(
+        "PROJECT_TASKS_SPREADSHEET_ID",
+      );
+
+    if (!projectSpreadsheetId && !commonSpreadsheetId) {
       addErrorLog(
         "sendProcessingTaskToUser",
-        "TASKS_SPREADSHEET_ID не налаштовано в Script Properties",
+        "TASKS_SPREADSHEET_ID та PROJECT_TASKS_SPREADSHEET_ID не налаштовано в Script Properties",
       );
 
       return;
     }
 
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    const sheet = spreadsheet.getSheetByName(config.sheetName);
+    const commonSpreadsheet = SpreadsheetApp.openById(commonSpreadsheetId);
+    const projectSpreadsheet = SpreadsheetApp.openById(projectSpreadsheetId);
+    const commonSheet = commonSpreadsheet.getSheetByName(config.sheetName);
+    const projectSheet = projectSpreadsheet.getSheetByName(config.sheetName);
 
-    if (!sheet) {
+    if (!commonSheet && !projectSheet) {
       addErrorLog(
         "sendProcessingTaskToUser",
-        `Лист "${config.sheetName}" не знайдено`,
+        "Таблиця завдань не знайдена в обох таблицях",
       );
 
       return;
     }
 
     const lastCol = Math.max(...Object.values(config.columns));
-    const lastRow = sheet.getLastRow();
+    const commonLastRow = commonSheet.getLastRow();
 
-    const data = sheet
+    const commonData = commonSheet
       .getRange(
         config.dataStartRow,
         1,
-        lastRow - config.dataStartRow + 1,
+        commonLastRow - config.dataStartRow + 1,
         lastCol,
       )
       .getValues();
+
+    const projectLastRow = projectSheet.getLastRow();
+    const projectData = projectSheet
+      .getRange(
+        config.dataStartRow,
+        1,
+        projectLastRow - config.dataStartRow + 1,
+        lastCol,
+      )
+      .getValues();
+
+    const data = commonData.concat(projectData);
 
     const userTasks = data.reduce((acc, rowData) => {
       const rowUser = rowData[config.columns.RESPONSIBLE - 1];
