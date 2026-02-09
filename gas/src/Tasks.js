@@ -25,7 +25,7 @@ function formatTaskMessage(title, taskData) {
   }
 
   if (decision) {
-    message += `💵 ${decision}\n`;
+    message += `📝 ${decision}\n`;
   }
 
   message += `📅 <b>Виконати до:</b> ${date ? formatDateUa(date) : "Не вказано"}${isOverdued ? "\n" : ""}`;
@@ -58,7 +58,7 @@ function formatTasksMessage(title, tasksData, emptyText) {
     }
 
     if (decision) {
-      message += `💵 ${decision}\n`;
+      message += `📝 ${decision}\n`;
     }
 
     message += `📅 <b>Виконати до:</b> ${date ? formatDateUa(date) : "Не вказано"}${isOverdued ? "\n" : ""}`;
@@ -392,7 +392,7 @@ function sendProcessingTaskToUser(user, customConfig = {}) {
       (a, b) => getMidnightTimestamp(a.date) - getMidnightTimestamp(b.date),
     );
 
-    const message = formatPaymentsMessage(
+    const message = formatTasksMessage(
       "⏳ <b>Завдання в роботі:</b>",
       userTasks,
       "Всі завдання виконані! ✅",
@@ -637,7 +637,7 @@ function notifyAllTasks(customConfig = {}, mode = "morning") {
     taskNotifications.forEach(({ user, tasks }) => {
       if (!tasks.length) return;
 
-      const message = formatPaymentsMessage(
+      const message = formatTasksMessage(
         "⏳ <b>Нагадування про завдання в роботі:</b>",
         tasks,
         "Всі завдання виконані! ✅",
