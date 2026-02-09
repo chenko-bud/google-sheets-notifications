@@ -54,20 +54,20 @@ function formatTasksMessage(title, tasksData, emptyText) {
     let item = `${i + 1}.\n`;
 
     if (description) {
-      message += `📋 <b>Завдання:</b> ${description}\n`;
+      item += `📋 <b>Завдання:</b> ${description}\n`;
     }
 
     if (decision) {
-      message += `📝 ${decision}\n`;
+      item += `📝 ${decision}\n`;
     }
 
-    message += `📅 <b>Виконати до:</b> ${date ? formatDateUa(date) : "Не вказано"}${isOverdued ? "\n" : ""}`;
+    item += `📅 <b>Виконати до:</b> ${date ? formatDateUa(date) : "Не вказано"}${isOverdued ? "\n" : ""}`;
 
     if (isOverdued) {
-      message += ` ⚠️ <i>(Протерміновано)</i>`;
+      item += ` ⚠️ <i>(Протерміновано)</i>\n`;
     }
 
-    if (i < length - 1) item += "_______________________________________\n";
+    if (i < length - 1) item += "_______________________________________\n\n";
 
     if (currentLength + item.length > TELEGRAM_LIMIT) {
       message += "<i>Далі список обрізано через ліміт Telegram</i>\n";
