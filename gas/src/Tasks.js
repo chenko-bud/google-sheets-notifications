@@ -564,7 +564,6 @@ function notifyAllTasks(customConfig = {}, mode = "morning") {
   try {
     const lastCol = Math.max(
       ...Object.values(config.columns),
-      config.togglePaidColumn,
     );
     const lastRow = sheet.getLastRow();
     const data = sheet
@@ -575,7 +574,6 @@ function notifyAllTasks(customConfig = {}, mode = "morning") {
         lastCol,
       )
       .getValues();
-    const filterDate = new Date();
 
     // Групуємо завдання по відповідальному
     const userTasksMap = {};
