@@ -51,11 +51,7 @@ function formatTasksMessage(title, tasksData, emptyText) {
 
   tasksData.forEach(({ description, decision, date }, i, { length }) => {
     const isOverdued = compareDates(date, "<", currentDate);
-    let item = `${i + 1}.\n`;
-
-    if (description) {
-      item += `📋 <b>Завдання:</b> ${description}\n`;
-    }
+    let item = `📋 <b>Завдання №${i + 1}${description ? ":" : ""}</b> ${description || ""}\n`;
 
     if (decision) {
       item += `📝 ${decision}\n`;
